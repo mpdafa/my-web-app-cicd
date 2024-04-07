@@ -1,0 +1,42 @@
+stages:
+  - lint
+  - compile
+  - build_image
+
+lint:
+  image: golangci/golangci-lint:v1.55.2
+  stage: lint
+  script:
+    - echo "Linting code..."
+    - golangci-lint run ./... --timeout 5m
+  only:
+    - tags
+
+compile:
+  image: golang:1.21
+  stage: compile
+  script:
+    - echo "Building and compiling go..."
+    - go build -o ./app .
+  only:
+    - tags
+
+build_image:
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  stage: docker_build
+  variables:
+    DOCKER_CONFIG: /kaniko/.docker/
+  script:
+    - echo "Building Docker Images..."
+    - mkdir -p /kaniko/.docker
+    - echo $GCR_JSON_KEY | base64 -d > $CI_PROJECT_DIR/gcp_service_account_key.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=$CI_PROJECT_DIR/gcp_service_account_key.json
+    - >-
+      /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination gcr.io/$GCP_PROJECT_ID/my-go-app:${CI_COMMIT_TAG}
+  only:
+    - tags
